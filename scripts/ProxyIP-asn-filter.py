@@ -1,4 +1,4 @@
-# ProxyIP按地区分类高优筛选订阅
+# ProxyIP按地区分类高优筛选订阅（包含全地区汇总）
 import json
 import urllib.request
 import urllib.error
@@ -16,6 +16,9 @@ def generate_ips_from_api():
 
     # 数据源 API 接口
     API_URL = "https://zip.cm.edu.kg/all.json"
+    
+    # 汇总文件名
+    ALL_OUTPUT_FILENAME = "ProxyIP-asn-ips.txt"
     # ---------------------------------------------
 
     request_headers = {
@@ -57,11 +60,14 @@ def generate_ips_from_api():
 
     print(f"接口数据拉取成功: 准备分析总计 {len(node_data_list)} 条原始数据...")
 
-    # 🟢 核心改动：外层循环遍历每一个目标国家
+    # 🟢 建立一个大列表，用来存放所有选中地区的汇总数据
+    all_regions_ip_lines = []
+
+    # 外层循环遍历每一个目标国家
     for country_code in TARGET_COUNTRIES:
         seen_ips = set()
         final_ip_lines = []
-        output_filename = f"ProxyIP-{country_code}.txt" # 动态生成文件名，如 ProxyIP-SG.txt
+        output_filename = f"ProxyIP-{country_code}.txt" 
 
         for item in node_data_list:
             if not isinstance(item, dict):
@@ -112,6 +118,9 @@ def generate_ips_from_api():
                 # 格式化输出
                 ip_line = f"{current_ip}:{port}#{country}-{asn}\n"
                 final_ip_lines.append(ip_line)
+                
+                # 🟢 同步塞进总汇总列表中
+                all_regions_ip_lines.append(ip_line)
 
         total_ips = len(final_ip_lines)
         print(f"【{country_code}】筛选完成: 共筛出 {total_ips} 个独立合规 IP。")
@@ -121,11 +130,24 @@ def generate_ips_from_api():
             try:
                 with open(output_filename, "w", encoding="utf-8") as f:
                     f.writelines(final_ip_lines)
-                print(f"成功保存文件: {output_filename}")
+                print(f"成功保存分流文件: {output_filename}")
             except IOError as e:
-                print(f"写入文件失败 {output_filename}: {e}")
+                print(f"写入分流文件失败 {output_filename}: {e}")
         else:
-            print(f"未筛选到 {country_code} 的节点，跳过生成文件。")
+            print(f"未筛选到 {country_code} 的节点，跳过生成分流文件。")
+
+    # 🟢 所有的国家遍历完成后，统一把大列表写入汇总文件
+    total_all_ips = len(all_regions_ip_lines)
+    print(f"=== 正在生成全局汇总文件 ===")
+    if total_all_ips > 0:
+        try:
+            with open(ALL_OUTPUT_FILENAME, "w", encoding="utf-8") as f:
+                f.writelines(all_regions_ip_lines)
+            print(f"🎉 汇总文件保存成功: {ALL_OUTPUT_FILENAME} (包含以上所有地区共 {total_all_ips} 行数据)")
+        except IOError as e:
+            print(f"写入汇总文件失败 {ALL_OUTPUT_FILENAME}: {e}")
+    else:
+        print("未筛选到任何合规节点，停止生成汇总文件。")
 
 if __name__ == "__main__":
     generate_ips_from_api()

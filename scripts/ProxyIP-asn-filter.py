@@ -1,17 +1,12 @@
-# ProxyIP高优筛选订阅
-# 正常执行后会在当前目录下生成纯 IP 列表文件：ProxyIP-asn-ips.txt
-# 格式为：ip:端口#地区-asn，包含 IPv4 和 IPv6（IPv6不带中括号）
-
+# ProxyIP按地区分类高优筛选订阅
 import json
 import urllib.request
 import urllib.error
 
 def generate_ips_from_api():
     # ------------------ 配置区域 ------------------
-    
-    # 支持多国筛选：用集合(Set)定义你需要保留的国家代码
-    # 如果不想限制国家，直接设置为 None 或者空集合 set() 即可
-    TARGET_COUNTRY = {"HK", "SG", "TW", "JP", "KR"}
+    # 定义你需要独立生成文件的国家/地区列表
+    TARGET_COUNTRIES = ["HK", "SG", "TW", "JP", "KR"]
     
     # 高优 ASN 筛选列表
     TARGET_ASNS = None
@@ -21,10 +16,6 @@ def generate_ips_from_api():
 
     # 数据源 API 接口
     API_URL = "https://zip.cm.edu.kg/all.json"
-    
-    # 输出文件名
-    OUTPUT_FILENAME = "ProxyIP-asn-ips.txt"
-    
     # ---------------------------------------------
 
     request_headers = {
@@ -66,74 +57,75 @@ def generate_ips_from_api():
 
     print(f"接口数据拉取成功: 准备分析总计 {len(node_data_list)} 条原始数据...")
 
-    seen_ips = set()
-    final_ip_lines = []
+    # 🟢 核心改动：外层循环遍历每一个目标国家
+    for country_code in TARGET_COUNTRIES:
+        seen_ips = set()
+        final_ip_lines = []
+        output_filename = f"ProxyIP-{country_code}.txt" # 动态生成文件名，如 ProxyIP-SG.txt
 
-    for item in node_data_list:
-        if not isinstance(item, dict):
-            continue
-
-        meta_data = item.get("meta", {})
-        if not isinstance(meta_data, dict):
-            meta_data = {}
-
-        country = meta_data.get("country", "UNKNOWN")
-        asn = meta_data.get("asn", "UNKNOWN")
-
-        port = item.get("_port") or item.get("port")
-        if isinstance(port, list) and len(port) > 0:
-            port = port[0]
-
-        if port is None:
-            continue
-
-        # 多国筛选过滤
-        if TARGET_COUNTRY and country not in TARGET_COUNTRY:
-            continue
-            
-        if TARGET_ASNS and asn not in TARGET_ASNS:
-            continue
-            
-        if TARGET_PORT and int(port) != TARGET_PORT:
-            continue
-        
-        v4_ip = item.get("ip")
-        v6_ip = meta_data.get("clientIp")
-        
-        node_ips = []
-        if v4_ip:
-            node_ips.append(v4_ip)
-        if v6_ip:
-            node_ips.append(v6_ip)
-            
-        if not node_ips:
-            continue
-            
-        for current_ip in node_ips:
-            if current_ip in seen_ips:
+        for item in node_data_list:
+            if not isinstance(item, dict):
                 continue
 
-            seen_ips.add(current_ip)
+            meta_data = item.get("meta", {})
+            if not isinstance(meta_data, dict):
+                meta_data = {}
+
+            country = meta_data.get("country", "UNKNOWN")
+            asn = meta_data.get("asn", "UNKNOWN")
+
+            port = item.get("_port") or item.get("port")
+            if isinstance(port, list) and len(port) > 0:
+                port = port[0]
+
+            if port is None:
+                continue
+
+            # 精确匹配当前循环的国家
+            if country != country_code:
+                continue
+                
+            if TARGET_ASNS and asn not in TARGET_ASNS:
+                continue
+                
+            if TARGET_PORT and int(port) != TARGET_PORT:
+                continue
             
-            # 🟢 彻底移除 IPv6 加括号逻辑，直接使用原始 current_ip 写入
-            # 格式化输出为：ip:端口#地区-asn
-            ip_line = f"{current_ip}:{port}#{country}-{asn}\n"
-            final_ip_lines.append(ip_line)
+            v4_ip = item.get("ip")
+            v6_ip = meta_data.get("clientIp")
+            
+            node_ips = []
+            if v4_ip:
+                node_ips.append(v4_ip)
+            if v6_ip:
+                node_ips.append(v6_ip)
+                
+            if not node_ips:
+                continue
+                
+            for current_ip in node_ips:
+                if current_ip in seen_ips:
+                    continue
 
-    total_ips = len(final_ip_lines)
-    print(f"多维匹配完成: 精确筛出并去重 {total_ips} 个独立合规 IP。")
+                seen_ips.add(current_ip)
+                
+                # 格式化输出
+                ip_line = f"{current_ip}:{port}#{country}-{asn}\n"
+                final_ip_lines.append(ip_line)
 
-    if total_ips == 0:
-        print("未筛选到符合国家和 ASN 条件的优质节点，停止生成文件。")
-        return
+        total_ips = len(final_ip_lines)
+        print(f"【{country_code}】筛选完成: 共筛出 {total_ips} 个独立合规 IP。")
 
-    # 统一写入单个目标文件
-    try:
-        with open(OUTPUT_FILENAME, "w", encoding="utf-8") as f:
-            f.writelines(final_ip_lines)
-        print(f"文件保存成功: {OUTPUT_FILENAME} (共包含 {total_ips} 行数据)")
-    except IOError as e:
-        print(f"文件写入失败 {OUTPUT_FILENAME}: {e}")
+        # 为当前国家写入独立文件
+        if total_ips > 0:
+            try:
+                with open(output_filename, "w", encoding="utf-8") as f:
+                    f.writelines(final_ip_lines)
+                print(f"成功保存文件: {output_filename}")
+            except IOError as e:
+                print(f"写入文件失败 {output_filename}: {e}")
+        else:
+            print(f"未筛选到 {country_code} 的节点，跳过生成文件。")
 
 if __name__ == "__main__":
     generate_ips_from_api()

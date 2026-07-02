@@ -8,6 +8,10 @@ on:
 jobs:
   run-script:
     runs-on: ubuntu-latest
+    
+    # 记得加上写入权限，否则 push 会报 403
+    permissions:
+      contents: write
 
     steps:
     - name: 检出仓库代码
@@ -18,7 +22,6 @@ jobs:
       with:
         python-version: '3.10'
 
-    # 🟢 已精简：直接运行脚本，不再注入任何 Secrets 变量
     - name: 执行筛选脚本
       run: python scripts/ProxyIP-asn-filter.py
 
@@ -27,15 +30,13 @@ jobs:
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         
-        if [ -f ProxyIP-asn-ips.txt ]; then
-          git add ProxyIP-asn-ips.txt
-          if git diff --staged --quiet; then
-            echo "IP 列表未发生变化，无需更新。"
-          else
-            git commit -m "自动更新 ProxyIP 列表 (时间: $(date +'%Y-%m-%d %H:%M:%S'))"
-            git push origin main
-          fi
+        # 🟢 动态添加所有生成的 ProxyIP-*.txt 文件
+        git add ProxyIP-*.txt
+        
+        # 检查暂存区是否有变化
+        if git diff --staged --quiet; then
+          echo "所有地区的 IP 列表均未发生变化，无需更新。"
         else
-          echo "错误：未检测到生成的 ProxyIP-asn-ips.txt 文件！"
-          exit 1
+          git commit -m "自动更新各地区 ProxyIP 列表 (时间: $(date +'%Y-%m-%d %H:%M:%S'))"
+          git push origin main
         fi

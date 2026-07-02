@@ -6,7 +6,7 @@ import urllib.error
 def generate_ips_from_api():
     # ------------------ 配置区域 ------------------
     # 定义你需要独立生成文件的国家/地区列表
-    TARGET_COUNTRIES = ["HK", "SG", "TW", "JP", "KR"]
+    TARGET_COUNTRIES = ["HK", "SG", "TW", "JP", "KR", "US"]
     
     # 高优 ASN 筛选列表
     TARGET_ASNS = None
